@@ -1,218 +1,175 @@
-% ========================
-% Ideal
-% ========================
+% =============================================
+% 75-kVA Distribution Transformer Analysis
+% With Efficiency and Regulation Plots
+% =============================================
 
-% Ideal Transformer Simulation
 clear all;
 close all;
 clc;
 
-% Parameters
-f = 50;                 % Frequency (Hz)
-Vp = 230;               % Primary voltage (V)
-Np = 500;               % Primary turns
-Ns = 100;               % Secondary turns
-a = Np/Ns;              % Turns ratio
-RL = 10;                % Load resistance (Ohm)
+%% Transformer Parameters
+S_rated = 75e3;         % Rated power (VA)
+f = 60;                 % Frequency (Hz)
+V1_rated = 4600;        % HV side rated voltage (V)
+V2_rated = 240;         % LV side rated voltage (V)
+a = V1_rated/V2_rated;  % Turns ratio
 
-% Time vector
-t = linspace(0, 0.1, 1000); % 10 cycles
+% Given parameters (in ohms)
+R1 = 0.846;             % HV winding resistance
+R2 = 0.00261;           % LV winding resistance
+X1 = 26.8;              % HV leakage reactance
+X2 = 0.0745;            % LV leakage reactance
+Rc = 220000;            % Core loss resistance
+Xm = 112000;            % Magnetizing reactance
 
-% Primary voltage
-Vp_t = Vp * sqrt(2) * sin(2*pi*f*t);
+% Base values
+I2_rated = S_rated / V2_rated;  % Rated LV current
+Z2_base = V2_rated / I2_rated;  % LV base impedance
 
-% Secondary voltage (ideal)
-Vs_t = Vp_t / a;
+%% Part a: HV Terminal Voltage vs Power Factor
+pf_angles = acos([0.6 0.7 0.8 0.9 1.0 0.9 0.8 0.7 0.6]); % pf angles
+pf_labels = {'0.6 lead', '0.7 lead', '0.8 lead', '0.9 lead', '1.0', ...
+             '0.9 lag', '0.8 lag', '0.7 lag', '0.6 lag'};
+theta_range = -pf_angles(1:4) pf_angles(5) pf_angles(6:9); % Angle range
 
-% Secondary current
-Is_t = Vs_t / RL;
+V1_terminal = zeros(size(pf_angles));
+regulation = zeros(size(pf_angles));
 
-% Primary current (ideal)
-Ip_t = -Is_t / a;
+for i = 1:length(pf_angles)
+    theta = theta_range(i);
+    I2 = I2_rated * (cos(theta) + 1i*sin(theta)); % Full load current
+    
+    % Refer LV side quantities to HV side
+    I2_prime = I2 / a;
+    Zeq = (R1 + a^2*R2) + 1i*(X1 + a^2*X2); % Equivalent impedance
+    
+    % Calculate terminal voltage
+    E1 = V2_rated * a + I2_prime * Zeq;
+    V1_terminal(i) = abs(E1);
+    
+    % Calculate regulation
+    regulation(i) = (V1_terminal(i) - V2_rated*a) / (V2_rated*a) * 100;
+end
 
-% Plot results
-figure;
-subplot(2,1,1);
-plot(t, Vp_t, 'b', t, Vs_t, 'r');
-title('Primary and Secondary Voltages');
-xlabel('Time (s)');
-ylabel('Voltage (V)');
-legend('Primary V_p', 'Secondary V_s');
+% Plot HV terminal voltage vs power factor
+figure('Name', 'HV Terminal Voltage', 'NumberTitle', 'off');
+plot(rad2deg(theta_range), V1_terminal, 'b-o', 'LineWidth', 2);
+xlabel('Power Factor Angle (degrees)');
+ylabel('HV Terminal Voltage (V)');
+title('HV Terminal Voltage vs Power Factor at Full Load');
 grid on;
+xticks(rad2deg(theta_range));
+xticklabels(pf_labels);
+xlim([rad2deg(theta_range(1)) rad2deg(theta_range(end))]);
 
-subplot(2,1,2);
-plot(t, Ip_t, 'b', t, Is_t, 'r');
-title('Primary and Secondary Currents');
-xlabel('Time (s)');
-ylabel('Current (A)');
-legend('Primary I_p', 'Secondary I_s');
+%% Part b: Efficiency and Regulation Plots
+load_factors = [1.0, 0.5, 0.25]; % Full, half, and quarter load
+colors = ['r', 'g', 'b'];
+markers = ['o', 's', 'd'];
+
+figure('Name', 'Efficiency and Regulation', 'NumberTitle', 'off', 'Position', [100 100 1200 500]);
+
+% Efficiency subplot
+subplot(1,2,1);
+hold on;
+for k = 1:length(load_factors)
+    K = load_factors(k);
+    efficiency = zeros(size(pf_angles));
+    
+    for i = 1:length(pf_angles)
+        theta = theta_range(i);
+        I2 = K * I2_rated * (cos(theta) + 1i*sin(theta));
+        
+        % Refer LV side quantities to HV side
+        I2_prime = I2 / a;
+        Zeq = (R1 + a^2*R2) + 1i*(X1 + a^2*X2);
+        
+        % Calculate voltages and currents
+        E1 = V2_rated * a + I2_prime * Zeq;
+        I1 = I2_prime + E1/Rc + E1/(1i*Xm);
+        
+        % Power calculations
+        P_out = real(V2_rated * conj(I2));
+        P_cu = abs(I2)^2 * (a^2*R2 + R1); % Copper losses
+        P_core = abs(E1)^2 / Rc;           % Core losses
+        P_in = P_out + P_cu + P_core;
+        
+        efficiency(i) = P_out / P_in * 100;
+    end
+    
+    plot(rad2deg(theta_range), efficiency, [colors(k) '-' markers(k)], 'LineWidth', 1.5, ...
+        'DisplayName', sprintf('%d%% Load', K*100));
+end
+
+xlabel('Power Factor Angle (degrees)');
+ylabel('Efficiency (%)');
+title('Efficiency vs Power Factor');
 grid on;
+xticks(rad2deg(theta_range));
+xticklabels(pf_labels);
+xlim([rad2deg(theta_range(1)) rad2deg(theta_range(end))]);
+legend('Location', 'best');
+ylim([95 100]); % Typical efficiency range for distribution transformers
 
+% Regulation subplot
+subplot(1,2,2);
+hold on;
+for k = 1:length(load_factors)
+    K = load_factors(k);
+    regulation = zeros(size(pf_angles));
+    
+    for i = 1:length(pf_angles)
+        theta = theta_range(i);
+        I2 = K * I2_rated * (cos(theta) + 1i*sin(theta));
+        
+        % Refer LV side quantities to HV side
+        I2_prime = I2 / a;
+        Zeq = (R1 + a^2*R2) + 1i*(X1 + a^2*X2);
+        
+        % Calculate terminal voltage
+        E1 = V2_rated * a + I2_prime * Zeq;
+        regulation(i) = (abs(E1) - V2_rated*a) / (V2_rated*a) * 100;
+    end
+    
+    plot(rad2deg(theta_range), regulation, [colors(k) '-' markers(k)], 'LineWidth', 1.5, ...
+        'DisplayName', sprintf('%d%% Load', K*100));
+end
 
-% ========================
-% Non-Ideal
-% ========================
-
-% Non-Ideal Transformer Simulation
-
-% Parameters
-f = 50;                 % Frequency (Hz)
-Vp = 230;               % Primary voltage (V)
-Np = 500;               % Primary turns
-Ns = 100;               % Secondary turns
-a = Np/Ns;              % Turns ratio
-RL = 10;                % Load resistance (Ohm)
-
-% Non-ideal parameters
-Rp = 0.5;               % Primary winding resistance (Ohm)
-Rs = 0.1;               % Secondary winding resistance (Ohm)
-Lp = 0.01;              % Primary leakage inductance (H)
-Ls = 0.001;             % Secondary leakage inductance (H)
-Rc = 5000;              % Core loss resistance (Ohm)
-Lm = 0.5;               % Magnetizing inductance (H)
-
-% Angular frequency
-w = 2*pi*f;
-
-% Time vector
-t = linspace(0, 0.1, 1000); % 10 cycles
-
-% Primary voltage
-Vp_t = Vp * sqrt(2) * sin(2*pi*f*t);
-
-% Convert to phasor domain for calculations
-Vp_phasor = Vp;
-
-% Equivalent circuit referred to primary
-Req = Rp + a^2 * Rs + a^2 * RL;
-Xeq = w*Lp + a^2 * w*Ls;
-Zeq = Req + 1j*Xeq;
-
-% Parallel branch impedance
-Zm = (Rc * 1j*w*Lm) / (Rc + 1j*w*Lm);
-
-% Total impedance
-Ztotal = 1 / (1/Zm + 1/Zeq);
-
-% Primary current
-Ip_phasor = Vp_phasor / Ztotal;
-
-% Voltage across parallel branch
-E1_phasor = Vp_phasor - Ip_phasor * Rp;
-
-% Secondary current referred to primary
-I2_prime_phasor = E1_phasor / Zeq;
-
-% Actual secondary current
-Is_phasor = a * I2_prime_phasor;
-
-% Secondary voltage
-Vs_phasor = Is_phasor * RL;
-
-% Convert back to time domain
-Ip_t = abs(Ip_phasor) * sqrt(2) .* sin(2*pi*f*t + angle(Ip_phasor));
-Is_t = abs(Is_phasor) * sqrt(2) .* sin(2*pi*f*t + angle(Is_phasor));
-Vs_t = abs(Vs_phasor) * sqrt(2) .* sin(2*pi*f*t + angle(Vs_phasor));
-
-% Plot results
-figure;
-subplot(3,1,1);
-plot(t, Vp_t, 'b', t, Vs_t, 'r');
-title('Primary and Secondary Voltages (Non-Ideal)');
-xlabel('Time (s)');
-ylabel('Voltage (V)');
-legend('Primary V_p', 'Secondary V_s');
+xlabel('Power Factor Angle (degrees)');
+ylabel('Voltage Regulation (%)');
+title('Voltage Regulation vs Power Factor');
 grid on;
+xticks(rad2deg(theta_range));
+xticklabels(pf_labels);
+xlim([rad2deg(theta_range(1)) rad2deg(theta_range(end))]);
+legend('Location', 'best');
 
-subplot(3,1,2);
-plot(t, Ip_t, 'b', t, Is_t, 'r');
-title('Primary and Secondary Currents (Non-Ideal)');
-xlabel('Time (s)');
-ylabel('Current (A)');
-legend('Primary I_p', 'Secondary I_s');
-grid on;
+%% Tapping Range Analysis
+max_V1 = max(V1_terminal);
+min_V1 = min(V1_terminal);
+nominal_V1 = V2_rated * a;
 
-% Power calculations
-P_in = Vp_t .* Ip_t;
-P_out = Vs_t .* Is_t;
-efficiency = mean(P_out) / mean(P_in) * 100;
+tapping_range = 5; % ±5%
+min_allowed = nominal_V1 * (1 - tapping_range/100);
+max_allowed = nominal_V1 * (1 + tapping_range/100);
 
-subplot(3,1,3);
-plot(t, P_in, 'b', t, P_out, 'r');
-title('Input and Output Power');
-xlabel('Time (s)');
-ylabel('Power (W)');
-legend('Input Power', 'Output Power');
-grid on;
+fprintf('\n==== Tapping Range Analysis ====\n');
+fprintf('Nominal HV voltage: %.1f V\n', nominal_V1);
+fprintf('Maximum required HV voltage: %.1f V\n', max_V1);
+fprintf('Minimum required HV voltage: %.1f V\n', min_V1);
+fprintf('Allowed tapping range (±5%%): %.1f V to %.1f V\n', min_allowed, max_allowed);
 
-fprintf('Transformer Efficiency: %.2f%%\n', efficiency);
-
-% ========================
-% Open-Circuit and Short-Circuit Test
-% ========================
-
-% Transformer Open-Circuit and Short-Circuit Tests
-
-
-% Parameters
-f = 50;                 % Frequency (Hz)
-V_rated = 230;          % Rated voltage (V)
-I_rated = 10;           % Rated current (A)
-Np = 500;               % Primary turns
-Ns = 100;               % Secondary turns
-a = Np/Ns;              % Turns ratio
-
-% Open-circuit test (on secondary side)
-Voc = V_rated;
-Ioc = 0.5;              % Open-circuit current
-Poc = 30;               % Open-circuit power
-
-% Short-circuit test (on primary side)
-Vsc = 20;               % Short-circuit voltage
-Isc = I_rated;
-Psc = 100;              % Short-circuit power
-
-% Calculate parameters from OC test
-Yoc = Ioc / Voc;
-theta_oc = acos(Poc / (Voc * Ioc));
-Gc = Yoc * cos(theta_oc);
-Bm = -Yoc * sin(theta_oc);
-Rc = 1 / Gc;
-Xm = 1 / Bm;
-
-% Calculate parameters from SC test
-Zsc = Vsc / Isc;
-theta_sc = acos(Psc / (Vsc * Isc));
-Req = Zsc * cos(theta_sc);
-Xeq = Zsc * sin(theta_sc);
-
-% Display results
-fprintf('Open-Circuit Test Results:\n');
-fprintf('Core loss resistance (Rc): %.2f Ohm\n', Rc);
-fprintf('Magnetizing reactance (Xm): %.2f Ohm\n', Xm);
-fprintf('\nShort-Circuit Test Results:\n');
-fprintf('Equivalent resistance (Req): %.4f Ohm\n', Req);
-fprintf('Equivalent reactance (Xeq): %.4f Ohm\n', Xeq);
-
-% Plot equivalent circuit
-figure;
-% Primary side
-annotation('textarrow', [0.1 0.2], [0.8 0.8], 'String', 'V_p');
-annotation('rectangle', [0.25 0.7 0.1 0.1]);
-annotation('textbox', [0.25 0.7 0.1 0.1], 'String', 'R_p+jX_p', 'FitBoxToText', 'on');
-annotation('line', [0.35 0.45], [0.75 0.75]);
-annotation('rectangle', [0.45 0.7 0.1 0.1]);
-annotation('textbox', [0.45 0.7 0.1 0.1], 'String', 'Ideal', 'FitBoxToText', 'on');
-annotation('textbox', [0.45 0.65 0.1 0.05], 'String', 'Transformer', 'FitBoxToText', 'on');
-annotation('line', [0.55 0.65], [0.75 0.75]);
-annotation('rectangle', [0.65 0.7 0.1 0.1]);
-annotation('textbox', [0.65 0.7 0.1 0.1], 'String', 'R_s+jX_s', 'FitBoxToText', 'on');
-annotation('textarrow', [0.75 0.85], [0.8 0.8], 'String', 'V_s');
-annotation('rectangle', [0.25 0.5 0.1 0.1]);
-annotation('textbox', [0.25 0.5 0.1 0.1], 'String', 'R_c', 'FitBoxToText', 'on');
-annotation('rectangle', [0.25 0.3 0.1 0.1]);
-annotation('textbox', [0.25 0.3 0.1 0.1], 'String', 'jX_m', 'FitBoxToText', 'on');
-annotation('line', [0.35 0.35], [0.55 0.75]);
-annotation('line', [0.35 0.35], [0.25 0.45]);
-title('Transformer Equivalent Circuit');
-axis off;
+if max_V1 > max_allowed || min_V1 < min_allowed
+    fprintf('\nWARNING: The ±5%% tapping range is INSUFFICIENT to maintain\n');
+    fprintf('the required secondary voltage under all load conditions.\n');
+    
+    % Calculate required tapping range
+    required_min_tap = (min_V1 - nominal_V1)/nominal_V1 * 100;
+    required_max_tap = (max_V1 - nominal_V1)/nominal_V1 * 100;
+    
+    fprintf('\nRequired tapping range: %.1f%% to %.1f%%\n', ...
+        required_min_tap, required_max_tap);
+else
+    fprintf('\nThe ±5%% tapping range is SUFFICIENT to maintain\n');
+    fprintf('the required secondary voltage under all load conditions.\n');
+end
