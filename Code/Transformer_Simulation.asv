@@ -49,10 +49,6 @@ legend('Primary I_p', 'Secondary I_s');
 grid on;
 
 
-% ========================
-% Non-Ideal
-% ========================
-
 % Non-Ideal Transformer Simulation
 
 % Parameters
@@ -146,73 +142,3 @@ legend('Input Power', 'Output Power');
 grid on;
 
 fprintf('Transformer Efficiency: %.2f%%\n', efficiency);
-
-% ========================
-% Open-Circuit and Short-Circuit Test
-% ========================
-
-% Transformer Open-Circuit and Short-Circuit Tests
-
-
-% Parameters
-f = 50;                 % Frequency (Hz)
-V_rated = 230;          % Rated voltage (V)
-I_rated = 10;           % Rated current (A)
-Np = 500;               % Primary turns
-Ns = 100;               % Secondary turns
-a = Np/Ns;              % Turns ratio
-
-% Open-circuit test (on secondary side)
-Voc = V_rated;
-Ioc = 0.5;              % Open-circuit current
-Poc = 30;               % Open-circuit power
-
-% Short-circuit test (on primary side)
-Vsc = 20;               % Short-circuit voltage
-Isc = I_rated;
-Psc = 100;              % Short-circuit power
-
-% Calculate parameters from OC test
-Yoc = Ioc / Voc;
-theta_oc = acos(Poc / (Voc * Ioc));
-Gc = Yoc * cos(theta_oc);
-Bm = -Yoc * sin(theta_oc);
-Rc = 1 / Gc;
-Xm = 1 / Bm;
-
-% Calculate parameters from SC test
-Zsc = Vsc / Isc;
-theta_sc = acos(Psc / (Vsc * Isc));
-Req = Zsc * cos(theta_sc);
-Xeq = Zsc * sin(theta_sc);
-
-% Display results
-fprintf('Open-Circuit Test Results:\n');
-fprintf('Core loss resistance (Rc): %.2f Ohm\n', Rc);
-fprintf('Magnetizing reactance (Xm): %.2f Ohm\n', Xm);
-fprintf('\nShort-Circuit Test Results:\n');
-fprintf('Equivalent resistance (Req): %.4f Ohm\n', Req);
-fprintf('Equivalent reactance (Xeq): %.4f Ohm\n', Xeq);
-
-% Plot equivalent circuit
-figure;
-% Primary side
-annotation('textarrow', [0.1 0.2], [0.8 0.8], 'String', 'V_p');
-annotation('rectangle', [0.25 0.7 0.1 0.1]);
-annotation('textbox', [0.25 0.7 0.1 0.1], 'String', 'R_p+jX_p', 'FitBoxToText', 'on');
-annotation('line', [0.35 0.45], [0.75 0.75]);
-annotation('rectangle', [0.45 0.7 0.1 0.1]);
-annotation('textbox', [0.45 0.7 0.1 0.1], 'String', 'Ideal', 'FitBoxToText', 'on');
-annotation('textbox', [0.45 0.65 0.1 0.05], 'String', 'Transformer', 'FitBoxToText', 'on');
-annotation('line', [0.55 0.65], [0.75 0.75]);
-annotation('rectangle', [0.65 0.7 0.1 0.1]);
-annotation('textbox', [0.65 0.7 0.1 0.1], 'String', 'R_s+jX_s', 'FitBoxToText', 'on');
-annotation('textarrow', [0.75 0.85], [0.8 0.8], 'String', 'V_s');
-annotation('rectangle', [0.25 0.5 0.1 0.1]);
-annotation('textbox', [0.25 0.5 0.1 0.1], 'String', 'R_c', 'FitBoxToText', 'on');
-annotation('rectangle', [0.25 0.3 0.1 0.1]);
-annotation('textbox', [0.25 0.3 0.1 0.1], 'String', 'jX_m', 'FitBoxToText', 'on');
-annotation('line', [0.35 0.35], [0.55 0.75]);
-annotation('line', [0.35 0.35], [0.25 0.45]);
-title('Transformer Equivalent Circuit');
-axis off;
