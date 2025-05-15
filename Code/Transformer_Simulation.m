@@ -42,47 +42,15 @@ plot_efficiency_vs_pf(I2_full, a, Req, Xeq, Rc, V_HV, V_LV, load_factors, theta_
 % plot regulation vs Power Factor
 plot_regulation_vs_pf(I2_full, a, Req, Xeq, V_HV, load_factors, theta_deg);
 
+% draw tapping
+check_tapping_range(I2_full, a, Req, Xeq, V_HV, load_factors, theta_deg)
 
-%tapping check
-figure;
-hold on;
-tapping_upper = V_HV * 1.05;
-tapping_lower = V_HV * 0.95;
-for i = 1:length(load_factors)
-lf = load_factors(i);
-I2 = I2_full * lf;
-V1_values = zeros(size(theta_rad));
-for k = 1:length(theta_rad)
-theta = theta_rad(k);
-I_load_prime = (I2 / a) * exp(-1j * theta);
-V_drop = I_load_prime * (Req + 1j * Xeq);
-V1 = V_HV + V_drop;
-V1_values(k) = abs(V1);
-end
-% Plotting
-plot(theta_deg, V1_values, colors(i), 'DisplayName', labels{i});
-% Indices where voltage is within tapping range
-idx_valid = find(V1_values <= tapping_upper & V1_values >= tapping_lower);
-fprintf('Load factor: %.2f\n', lf);
-if ~isempty(idx_valid)
-min_valid_angle = theta_deg(min(idx_valid));
-max_valid_angle = theta_deg(max(idx_valid));
-fprintf(' ✅ HV within ±5%% tapping from %.1f° to %.1f°\n\n', min_valid_angle, max_valid_angle);
-else
-fprintf(' ❌ HV voltage exceeds ±5%% tapping for all power factor angles.\n\n');
-end
-end
+% Note on ±5% voltage tapping range
+fprintf('\n--- Tapping Note ---\n');
+fprintf('The HV terminal voltage of the transformer changes with power factor.\n');
+fprintf('The ±5%% tapping range on the HV side equates to ±230 V (from 4370 V to 4830 V).\n');
+fprintf('Refer to the plot to verify whether the voltage remains within these limits.\n');
 
-yline(tapping_upper, '--r', 'Upper Tapping Limit', 'LabelHorizontalAlignment', 'left',...
-'LabelVerticalAlignment', 'bottom');
-yline(tapping_lower, '--b', 'Lower Tapping Limit', 'LabelHorizontalAlignment', 'left',...
-'LabelVerticalAlignment', 'top');
-xlabel('Power Factor Angle (degrees)');
-ylabel('HV Terminal Voltage (V)');
-title('d) HV Voltage vs Power Factor Angle at Full, Half, and Quarter Load');
-legend show;
-grid on;
-hold off
 
 %************* Functions ********%
 function [Req, Xeq, Zeq] = refer_secondary_to_HV(R2, X2, a, R1, X1)
@@ -255,3 +223,68 @@ function plot_regulation_vs_pf(I2_full, a, Req, Xeq, V_HV, load_factors, theta_d
 
 end
 
+function check_tapping_range(I2_full, a, Req, Xeq, V_HV, load_factors, theta_deg)
+% check_tapping_range - Verifies if HV voltage stays within ±5% tapping range
+%                       for different load factors and power factor angles.
+%
+% Inputs:
+%   I2_full      - Full-load secondary current (A)
+%   a            - Turns ratio (V1/V2)
+%   Req          - Equivalent resistance on HV side (Ohms)
+%   Xeq          - Equivalent reactance on HV side (Ohms)
+%   V_HV         - HV terminal voltage (V)
+%   load_factors - Array of load factors (e.g., [1.0, 0.5, 0.25])
+%   theta_deg    - Array of power factor angles in degrees (e.g., linspace(-54, 54, 100))
+
+    theta_rad = deg2rad(theta_deg);
+    tapping_upper = V_HV * 1.05;
+    tapping_lower = V_HV * 0.95;
+
+    % Set up plot
+    figure;
+    hold on;
+    colors = lines(length(load_factors));  % Generate distinct colors
+    labels = {'Full Load', 'Half Load', 'Quarter Load'};
+
+    for i = 1:length(load_factors)
+        lf = load_factors(i);
+        I2 = I2_full * lf;
+        V1_values = zeros(size(theta_rad));
+
+        for k = 1:length(theta_rad)
+            theta = theta_rad(k);
+            I_load_prime = (I2 / a) * exp(-1j * theta);
+            V_drop = I_load_prime * (Req + 1j * Xeq);
+            V1 = V_HV + V_drop;
+            V1_values(k) = abs(V1);
+        end
+
+        % Plot V1 over theta
+        plot(theta_deg, V1_values, 'Color', colors(i,:), 'DisplayName', labels{i}, 'LineWidth', 1.5);
+
+        % Find valid indices
+        idx_valid = find(V1_values <= tapping_upper & V1_values >= tapping_lower);
+        fprintf('Load factor: %.2f\n', lf);
+        if ~isempty(idx_valid)
+            min_valid_angle = theta_deg(min(idx_valid));
+            max_valid_angle = theta_deg(max(idx_valid));
+            fprintf(' ✅ HV within ±5%% tapping from %.1f° to %.1f°\n\n', min_valid_angle, max_valid_angle);
+        else
+            fprintf(' ❌ HV voltage exceeds ±5%% tapping for all power factor angles.\n\n');
+        end
+    end
+
+    % Add tapping limits to plot
+    yline(tapping_upper, '--r', 'Upper Tapping Limit', 'LabelHorizontalAlignment', 'left', ...
+          'LabelVerticalAlignment', 'bottom');
+    yline(tapping_lower, '--b', 'Lower Tapping Limit', 'LabelHorizontalAlignment', 'left', ...
+          'LabelVerticalAlignment', 'top');
+
+    xlabel('Power Factor Angle (degrees)');
+    ylabel('HV Terminal Voltage (V)');
+    title('d) HV Voltage vs Power Factor Angle at Full, Half, and Quarter Load');
+    legend('Location', 'best');
+    grid on;
+    hold off;
+
+end
