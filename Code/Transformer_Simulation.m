@@ -1,113 +1,138 @@
-clc; clear;
-
-% Transformer Ratings
-S_rated = 75000;        % VA
-V_HV = 4600;            % V
-V_LV = 240;             % V
-a = V_HV / V_LV;        % Turns ratio
-
-% Transformer impedances (in ohms)
+clc;
+clear;
+close all;
+% Transformer parameters
+S_rated = 75e3;
+V1_nom = 4600;
+V2 = 240;
 R1 = 0.846;
 R2 = 0.00261;
 X1 = 26.8;
 X2 = 0.0745;
-Rc = 220000;
-Xm = 112000;
-
-% Refer R1 and X1 to LV side
-R1_LV = R1 / a^2;
-X1_LV = X1 / a^2;
-
-% Total equivalent impedance on LV side
-Req = R1_LV + R2;
-Xeq = X1_LV + X2;
-Zeq = Req + 1i*Xeq;
-
-% Core losses (approx.)
-P_core = (V_LV^2) / Rc;
-
-% Load current at full-load (LV side)
-I_full = S_rated / V_LV;
-
-% Power factor angle sweep: from 0.6 leading to 0.6 lagging
-pf_vals = 0.6:0.01:1;
-theta_lead = -acos(pf_vals); % leading
-theta_lag = acos(pf_vals);  % lagging
-theta = [theta_lead(end:-1:1), theta_lag(2:end)];
-pf_total = [pf_vals(end:-1:1), pf_vals(2:end)];
-
-% Load conditions
-load_levels = [1, 0.5, 0.25]; % full, half, quarter
-colors = {'r', 'g', 'b'};
-
-% Initialize plots
-figure; hold on; grid on;
-title('HV Terminal Voltage vs Power Factor Angle');
-xlabel('Power Factor'); ylabel('HV Terminal Voltage (V)');
-
-figure_eff = figure; hold on; grid on;
-title('Efficiency vs Power Factor'); xlabel('Power Factor'); ylabel('Efficiency (%)');
-
-figure_reg = figure; hold on; grid on;
-title('Voltage Regulation vs Power Factor');
-xlabel('Power Factor'); ylabel('Regulation (%)');
-
-for i = 1:length(load_levels)
-    load_frac = load_levels(i);
-    I_load = I_full * load_frac;
-    
-    V_HV_vals = zeros(1, length(theta));
-    eff_vals = zeros(1, length(theta));
-    reg_vals = zeros(1, length(theta));
-    
-    for k = 1:length(theta)
-        angle = theta(k);
-        pf = pf_total(k);
-        
-        % Load current phasor
-        I = I_load * exp(-1i*angle);
-        
-        % Voltage drop across Zeq
-        V_drop = I * Zeq;
-        
-        % Source voltage required to maintain 240 V at load
-        V_source = 240 + V_drop;
-        
-        % Referred to HV side
-        V_HV_required = abs(V_source) * a;
-        V_HV_vals(k) = V_HV_required;
-        
-        % Output power (W)
-        P_out = S_rated * load_frac * pf;
-        
-        % Copper losses
-        P_cu = abs(I)^2 * real(Zeq);
-        
-        % Input power
-        P_in = P_out + P_cu + P_core;
-        
-        % Efficiency
-        eff_vals(k) = (P_out / P_in) * 100;
-        
-        % Voltage regulation
-        V_no_load = abs(240 + 0); % no current, so no drop
-        V_full_load = abs(V_source);
-        reg_vals(k) = ((V_no_load - V_full_load) / V_full_load) * 100;
-    end
-    
-    % Plot HV voltage
-    figure(1);
-    plot(pf_total, V_HV_vals, colors{i}, 'DisplayName', sprintf('Load: %.0f%%', load_frac*100));
-    
-    % Plot efficiency
-    figure(figure_eff);
-    plot(pf_total, eff_vals, colors{i}, 'DisplayName', sprintf('Load: %.0f%%', load_frac*100));
-    
-    % Plot regulation
-    figure(figure_reg);
-    plot(pf_total, reg_vals, colors{i}, 'DisplayName', sprintf('Load: %.0f%%', load_frac*100));
+Rc = 220e3;
+Xmu = 112e3;
+% Turns ratio
+a = V1_nom / V2;
+% Referred secondary impedances to primary
+R2_prime = R2 * a^2;
+X2_prime = X2 * a^2;
+R_total = R1 + R2_prime;
+X_total = X1 + X2_prime;
+% Full load secondary current
+I2_full = S_rated / V2;
+% power factor varies from 0.6 pf leading through unity pf to 0.6 pf lagging.
+theta_deg = linspace(-54, 54, 100);
+theta_values = deg2rad(theta_deg); % radians
+pf = cos(theta_values);
+% Part a: HV terminal voltage vs power factor at full-load
+V1_values = zeros(size(pf));
+for k = 1:length(theta_values)
+theta = theta_values(k);
+I_load_prime = (I2_full / a) * exp(-1j * theta);
+V_drop = I_load_prime * (R_total + 1j * X_total);
+V1 = V1_nom + V_drop;
+V1_values(k) = abs(V1);
+end
+figure;
+plot(theta_deg, V1_values);
+xlabel('Power Factor Angle (degrees)');
+ylabel('HV Terminal Voltage (V)');
+title('a) HV Voltage vs Power Factor Angle at Full Load');
+grid on;
+% Part b: Efficiency and regulation for different load factors
+load_factors = [1.0, 0.5, 0.25];
+colors = ['b', 'g', 'r'];
+labels = {'Full Load', 'Half Load', 'Quarter Load'};
+% Efficiency plot
+figure;
+hold on;
+for i = 1:length(load_factors)
+lf = load_factors(i);
+I2 = I2_full * lf;
+I_load_prime_mag = I2 / a;
+efficiencies = zeros(size(pf));
+for k = 1:length(theta_values)
+theta = theta_values(k);
+I_load_prime = I_load_prime_mag * exp(-1j * theta);
+V_drop = I_load_prime * (R_total + 1j * X_total);
+V1 = V1_nom + V_drop;
+V1_mag = abs(V1);
+P_out = V2 * I2 * cos(theta);
+copper_loss = (I_load_prime_mag^2) * R_total;
+core_loss = (V1_mag^2) / Rc;
+efficiency = P_out / (P_out + copper_loss + core_loss) * 100;
+efficiencies(k) = efficiency;
+end
+plot(rad2deg(theta_values), efficiencies, colors(i), 'DisplayName', labels{i});
+end
+xlabel('Power Factor angle');
+ylabel('Efficiency (%)');
+title('b) Efficiency vs Power Factor');
+legend;
+grid on;
+hold off;
+% Regulation plot
+figure;
+hold on;
+for i = 1:length(load_factors)
+lf = load_factors(i);
+I2 = I2_full * lf;
+I_load_prime_mag = I2 / a;
+regulations = zeros(size(pf));
+for k = 1:length(theta_values)
+theta = theta_values(k);
+I_load_prime = I_load_prime_mag * exp(-1j * theta);
+V_drop = I_load_prime * (R_total + 1j * X_total);
+V1 = V1_nom + V_drop;
+V1_mag = abs(V1);
+regulation = (V1_mag - V1_nom) / V1_nom * 100;
+regulations(k) = regulation;
+end
+plot(rad2deg(theta_values), regulations, colors(i), 'DisplayName', labels{i});
+end
+xlabel('Power Factor angle');
+ylabel('Voltage Regulation (%)');
+title('b) Voltage Regulation vs Power Factor');
+legend;
+grid on;
+hold off;
+%tapping check
+figure;
+hold on;
+tapping_upper = V1_nom * 1.05;
+tapping_lower = V1_nom * 0.95;
+for i = 1:length(load_factors)
+lf = load_factors(i);
+I2 = I2_full * lf;
+V1_values = zeros(size(theta_values));
+for k = 1:length(theta_values)
+theta = theta_values(k);
+I_load_prime = (I2 / a) * exp(-1j * theta);
+V_drop = I_load_prime * (R_total + 1j * X_total);
+V1 = V1_nom + V_drop;
+V1_values(k) = abs(V1);
+end
+% Plotting
+plot(theta_deg, V1_values, colors(i), 'DisplayName', labels{i});
+% Indices where voltage is within tapping range
+idx_valid = find(V1_values <= tapping_upper & V1_values >= tapping_lower);
+fprintf('Load factor: %.2f\n', lf);
+if ~isempty(idx_valid)
+min_valid_angle = theta_deg(min(idx_valid));
+max_valid_angle = theta_deg(max(idx_valid));
+fprintf(' ✅ HV within ±5%% tapping from %.1f° to %.1f°\n\n', min_valid_angle, max_valid_angle);
+else
+fprintf(' ❌ HV voltage exceeds ±5%% tapping for all power factor angles.\n\n');
+end
 end
 
-figure(1); legend;
-figure(figure_eff); legend;
-figure(figure_reg); legend;
+yline(tapping_upper, '--r', 'Upper Tapping Limit', 'LabelHorizontalAlignment', 'left',...
+'LabelVerticalAlignment', 'bottom');
+yline(tapping_lower, '--b', 'Lower Tapping Limit', 'LabelHorizontalAlignment', 'left',...
+'LabelVerticalAlignment', 'top');
+xlabel('Power Factor Angle (degrees)');
+ylabel('HV Terminal Voltage (V)');
+title('d) HV Voltage vs Power Factor Angle at Full, Half, and Quarter Load');
+legend show;
+grid on;
+hold off
