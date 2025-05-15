@@ -23,69 +23,26 @@ Xm = 112000;
 [Req, Xeq, Zeq] = refer_secondary_to_HV(R2, X2, a, R1, X1);
 
 %Part a) HV Voltage vs Power Factor
-theta_deg =linspace(-54, 54, 100);
+% power factor varies from 0.6 pf leading through unity pf to 0.6 pf lagging
+% add some saftey factor
+theta_deg =linspace(-60, 60, 100);
 theta_rad = deg2rad(theta_deg);
 pf = cos(theta_deg);
+
+% plot High Voltage vs Power Factor
 plot_HV_voltage_vs_power_factor(I2_full, a, Req, Xeq, V_HV, theta_deg);
 
 
 % Part b: Efficiency and regulation for different load factors
 load_factors = [1.0, 0.5, 0.25];
-colors = ['b', 'g', 'r'];
-labels = {'Full Load', 'Half Load', 'Quarter Load'};
-% Efficiency plot
-figure;
-hold on;
-for i = 1:length(load_factors)
-lf = load_factors(i);
-I2 = I2_full * lf;
-I_load_prime_mag = I2 / a;
-efficiencies = zeros(size(pf));
-for k = 1:length(theta_rad)
-theta = theta_rad(k);
-I_load_prime = I_load_prime_mag * exp(-1j * theta);
-V_drop = I_load_prime * (Req + 1j * Xeq);
-V1 = V_HV + V_drop;
-V1_mag = abs(V1);
-P_out = V_LV * I2 * cos(theta);
-copper_loss = (I_load_prime_mag^2) * Req;
-core_loss = (V1_mag^2) / Rc;
-efficiency = P_out / (P_out + copper_loss + core_loss) * 100;
-efficiencies(k) = efficiency;
-end
-plot(rad2deg(theta_rad), efficiencies, colors(i), 'DisplayName', labels{i});
-end
-xlabel('Power Factor angle');
-ylabel('Efficiency (%)');
-title('b) Efficiency vs Power Factor');
-legend;
-grid on;
-hold off;
-% Regulation plot
-figure;
-hold on;
-for i = 1:length(load_factors)
-lf = load_factors(i);
-I2 = I2_full * lf;
-I_load_prime_mag = I2 / a;
-regulations = zeros(size(pf));
-for k = 1:length(theta_rad)
-theta = theta_rad(k);
-I_load_prime = I_load_prime_mag * exp(-1j * theta);
-V_drop = I_load_prime * (Req + 1j * Xeq);
-V1 = V_HV + V_drop;
-V1_mag = abs(V1);
-regulation = (V1_mag - V_HV) / V_HV * 100;
-regulations(k) = regulation;
-end
-plot(rad2deg(theta_rad), regulations, colors(i), 'DisplayName', labels{i});
-end
-xlabel('Power Factor angle');
-ylabel('Voltage Regulation (%)');
-title('b) Voltage Regulation vs Power Factor');
-legend;
-grid on;
-hold off;
+
+% plot efficiency vs Power Factor
+plot_efficiency_vs_pf(I2_full, a, Req, Xeq, Rc, V_HV, V_LV, load_factors, theta_deg);
+
+% plot regulation vs Power Factor
+plot_regulation_vs_pf(I2_full, a, Req, Xeq, V_HV, load_factors, theta_deg);
+
+
 %tapping check
 figure;
 hold on;
@@ -191,3 +148,110 @@ function plot_HV_voltage_vs_power_factor(I2_full, a, Req, Xeq, V_HV, theta_deg)
     grid on;
 
 end
+
+function plot_efficiency_vs_pf(I2_full, a, Req, Xeq, Rc, V_HV, V_LV, load_factors, theta_deg)
+% plot_efficiency_vs_pf - Plots transformer efficiency vs power factor angle
+%
+% Inputs:
+%   I2_full      - Full-load secondary current (A)
+%   a            - Turns ratio (V1/V2)
+%   Req          - Equivalent resistance on HV side (Ohms)
+%   Xeq          - Equivalent reactance on HV side (Ohms)
+%   Rc           - Core loss resistance referred to HV side (Ohms)
+%   V_HV         - HV terminal voltage (V)
+%   V_LV         - LV terminal voltage (V)
+%   load_factors - Array of load factors (e.g., [1.0, 0.5, 0.25])
+%   theta_deg    - Array of power factor angles in degrees (e.g., linspace(-54, 54, 100))
+
+    theta_rad = deg2rad(theta_deg);
+    pf = cos(theta_rad);  % Not used directly, but kept for interpretation
+
+    % Plot setup
+    figure;
+    hold on;
+    colors = lines(length(load_factors));  % dynamic color generation
+
+    for i = 1:length(load_factors)
+        lf = load_factors(i);
+        I2 = I2_full * lf;
+        I_load_prime_mag = I2 / a;
+        efficiencies = zeros(size(theta_rad));
+
+        for k = 1:length(theta_rad)
+            theta = theta_rad(k);
+            I_load_prime = I_load_prime_mag * exp(-1j * theta);
+            V_drop = I_load_prime * (Req + 1j * Xeq);
+            V1 = V_HV + V_drop;
+            V1_mag = abs(V1);
+
+            P_out = V_LV * I2 * cos(theta);
+            copper_loss = (I_load_prime_mag^2) * Req;
+            core_loss = (V1_mag^2) / Rc;
+            P_in = P_out + copper_loss + core_loss;
+
+            efficiency = P_out / P_in * 100;
+            efficiencies(k) = efficiency;
+        end
+
+        plot(theta_deg, efficiencies, 'Color', colors(i,:), ...
+             'DisplayName', sprintf('Load Factor = %.2f', lf), 'LineWidth', 1.5);
+    end
+
+    xlabel('Power Factor Angle (degrees)');
+    ylabel('Efficiency (%)');
+    title('b) Efficiency vs Power Factor Angle');
+    legend('Location', 'best');
+    grid on;
+    hold off;
+
+end
+
+function plot_regulation_vs_pf(I2_full, a, Req, Xeq, V_HV, load_factors, theta_deg)
+% plot_regulation_vs_pf - Plots transformer voltage regulation vs power factor angle
+%
+% Inputs:
+%   I2_full      - Full-load secondary current (A)
+%   a            - Turns ratio (V1/V2)
+%   Req          - Equivalent resistance on HV side (Ohms)
+%   Xeq          - Equivalent reactance on HV side (Ohms)
+%   V_HV         - HV terminal voltage (V)
+%   load_factors - Array of load factors (e.g., [1.0, 0.5, 0.25])
+%   theta_deg    - Array of power factor angles in degrees (e.g., linspace(-54, 54, 100))
+
+    theta_rad = deg2rad(theta_deg);
+
+    % Plot setup
+    figure;
+    hold on;
+    colors = lines(length(load_factors));  % dynamic color generation
+
+    for i = 1:length(load_factors)
+        lf = load_factors(i);
+        I2 = I2_full * lf;
+        I_load_prime_mag = I2 / a;
+        regulations = zeros(size(theta_rad));
+
+        for k = 1:length(theta_rad)
+            theta = theta_rad(k);
+            I_load_prime = I_load_prime_mag * exp(-1j * theta);
+            V_drop = I_load_prime * (Req + 1j * Xeq);
+            V1 = V_HV + V_drop;
+            V1_mag = abs(V1);
+
+            regulation = (V1_mag - V_HV) / V_HV * 100;
+            regulations(k) = regulation;
+        end
+
+        plot(theta_deg, regulations, 'Color', colors(i,:), ...
+             'DisplayName', sprintf('Load Factor = %.2f', lf), 'LineWidth', 1.5);
+    end
+
+    xlabel('Power Factor Angle (degrees)');
+    ylabel('Voltage Regulation (%)');
+    title('c) Voltage Regulation vs Power Factor Angle');
+    legend('Location', 'best');
+    grid on;
+    hold off;
+
+end
+
